@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订单详情 - Doris AI助手</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 左侧订单详情区域 - 使用真实截图 */
+        .order-detail {
+            flex: 1;
+            background: white;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .order-detail-image {
+            width: 100%;
+            display: block;
+        }
+
+        /* 右侧Doris助手区域 */
+        .doris-assistant {
+            width: 450px;
+            background: #ffffff;
+            border-left: 1px solid #e8e8e8;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -4px 0 16px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .doris-assistant.collapsed {
+            width: 0;
+            min-width: 0;
+            border-left: none;
+            box-shadow: none;
+        }
+
+        .doris-assistant.collapsed > * {
+            display: none;
+        }
+
+        /* 展开按钮（当侧边栏收起时显示） */
+        .expand-btn {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .expand-btn:hover {
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .doris-assistant.collapsed ~ .expand-btn {
+            display: flex;
+        }
+
+        /* 头部 */
+        .doris-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #f0f0f0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .doris-title {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .doris-logo {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            backdrop-filter: blur(10px);
+        }
+
+        .doris-subtitle {
+            font-size: 13px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            position: absolute;
+            top: 20px;
+            right: 24px;
+        }
+
+        .collapse-btn,
+        .clear-btn {
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: white;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .collapse-btn:hover,
+        .clear-btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.5);
+        }
+
+        /* 快捷工具区 - 可扩展设计 */
+        .tools-section {
+            padding: 20px 24px;
+            border-bottom: 1px solid #f0f0f0;
+            background: #fafafa;
+        }
+
+        .tools-label {
+            font-size: 12px;
+            color: #8c8c8c;
+            margin-bottom: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .tool-card {
+            padding: 14px 16px;
+            background: white;
+            border: 1.5px solid #e8e8e8;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative;
+        }
+
+        .tool-card:hover:not(.disabled) {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .tool-card.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        }
+
+        .tool-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .tool-card.loading {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+        }
+
+        .tool-card.loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        .tool-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .tool-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #262626;
+        }
+
+        .tool-desc {
+            font-size: 11px;
+            color: #8c8c8c;
+            line-height: 1.4;
+        }
+
+        /* 对话区域 */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: #f5f5f5;
+        }
+
+        .chat-message {
+            margin-bottom: 20px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-user {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .message-doris {
+            display: flex;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
+        .doris-avatar {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .message-content {
+            max-width: 80%;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .message-user .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-doris .message-bubble {
+            background: white;
+            color: #262626;
+            border: 1px solid #e8e8e8;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #8c8c8c;
+            margin-top: 6px;
+            padding: 0 4px;
+        }
+
+        /* 诊断结果卡片 */
+        .result-card {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .result-icon {
+            font-size: 18px;
+        }
+
+        .result-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #262626;
+        }
+
+        .result-item {
+            margin-bottom: 14px;
+            font-size: 13px;
+        }
+
+        .result-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .result-label {
+            color: #8c8c8c;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .result-value {
+            color: #262626;
+            line-height: 1.6;
+        }
+
+        .confidence-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .confidence-high {
+            background: #f6ffed;
+            color: #52c41a;
+            border: 1px solid #b7eb8f;
+        }
+
+        .confidence-medium {
+            background: #fffbe6;
+            color: #faad14;
+            border: 1px solid #ffe58f;
+        }
+
+        .evidence-timeline {
+            list-style: none;
+            padding-left: 0;
+            position: relative;
+        }
+
+        .evidence-timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 8px;
+            bottom: 8px;
+            width: 2px;
+            background: #e8e8e8;
+        }
+
+        .evidence-timeline li {
+            padding: 8px 0 8px 24px;
+            position: relative;
+            font-size: 13px;
+            color: #595959;
+            line-height: 1.6;
+        }
+
+        .evidence-timeline li::before {
+            content: '';
+            position: absolute;
+            left: 2px;
+            top: 14px;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 50%;
+        }
+
+        .evidence-time {
+            color: #8c8c8c;
+            font-size: 12px;
+        }
+
+        /* 输入区域 */
+        .input-area {
+            padding: 20px 24px;
+            border-top: 1px solid #e8e8e8;
+            background: white;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1.5px solid #d9d9d9;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+            resize: none;
+            font-family: inherit;
+            line-height: 1.5;
+            max-height: 120px;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .send-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 打断按钮 */
+        .interrupt-btn {
+            padding: 12px 24px;
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            white-space: nowrap;
+            display: none;
+        }
+
+        .interrupt-btn.show {
+            display: block;
+        }
+
+        .interrupt-btn:hover {
+            background: #ff7875;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(255, 77, 79, 0.4);
+        }
+
+        /* 加载动画 */
+        .loading-dots {
+            display: flex;
+            gap: 6px;
+            padding: 8px 0;
+        }
+
+        .loading-dot {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1.2); opacity: 1; }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 80px 30px;
+            color: #8c8c8c;
+        }
+
+        .empty-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            opacity: 0.4;
+        }
+
+        .empty-title {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #595959;
+        }
+
+        .empty-text {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #8c8c8c;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f0f0f0;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #bfbfbf;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧订单详情 - 使用真实截图 -->
+        <div class="order-detail">
+            <!-- 说明：实际使用时，将下方路径替换为真实的订单详情页面截图路径 -->
+            <!-- 例如：<img src="../OPS deck页面/订单详情.png" alt="订单详情" class="order-detail-image"> -->
+
+            <!-- 模拟订单详情页面 -->
+            <div style="padding: 24px; background: #f5f7fa; min-height: 100vh;">
+                <div style="background: white; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2 style="font-size: 20px; font-weight: 600; color: #262626;">订单详情</h2>
+                        <div style="display: flex; gap: 8px;">
+                            <button style="padding: 8px 16px; background: #1890ff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">编辑</button>
+                            <button style="padding: 8px 16px; background: white; color: #262626; border: 1px solid #d9d9d9; border-radius: 6px; cursor: pointer; font-size: 14px;">取消</button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">订单号</div>
+                            <div style="font-size: 14px; color: #262626; font-weight: 500;">ACQKT2026030414573775</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">订单状态</div>
+                            <div style="font-size: 14px;"><span style="padding: 2px 8px; background: #fff7e6; color: #fa8c16; border-radius: 4px; font-size: 12px;">Ticketing</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">创建时间</div>
+                            <div style="font-size: 14px; color: #262626;">2026-03-04 14:57:39</div>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #262626;">航班信息</h3>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                            <div>
+                                <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">航司</div>
+                                <div style="font-size: 14px; color: #262626;">VY (Vueling)</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">航线</div>
+                                <div style="font-size: 14px; color: #262626;">BCN → MAD</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">出发时间</div>
+                                <div style="font-size: 14px; color: #262626;">2026-03-15 08:30</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">到达时间</div>
+                                <div style="font-size: 14px; color: #262626;">2026-03-15 09:45</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: white; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #262626;">价格信息</h3>
+                    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #fafafa; border-bottom: 1px solid #e8e8e8;">
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">乘客类型</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">票价</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">税费</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">总价</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">人数</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">币种</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #f0f0f0;">
+                                <td style="padding: 10px;">Adult</td>
+                                <td style="padding: 10px;">131.66</td>
+                                <td style="padding: 10px;">0.12</td>
+                                <td style="padding: 10px; font-weight: 600; color: #1890ff;">131.78</td>
+                                <td style="padding: 10px;">1</td>
+                                <td style="padding: 10px;">EUR</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #262626;">供应商信息</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">Vendor Code</div>
+                            <div style="font-size: 14px; color: #262626; font-family: monospace;">AVXNDC</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">PNR</div>
+                            <div style="font-size: 14px; color: #262626; font-family: monospace;">ACQKT2005930</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">Vendor Cost</div>
+                            <div style="font-size: 14px; color: #262626;">EUR 0.00</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 4px;">Payment Method</div>
+                            <div style="font-size: 14px; color: #262626;">VCC</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="font-size: 16px; font-weight: 600; color: #262626;">操作日志</h3>
+                        <button style="padding: 6px 12px; background: #1890ff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">+ Generate Log</button>
+                    </div>
+                    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #fafafa; border-bottom: 1px solid #e8e8e8;">
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">操作时间</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">类型</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">操作内容</th>
+                                <th style="padding: 10px; text-align: left; font-weight: 600;">操作人</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #f0f0f0;">
+                                <td style="padding: 10px;">2026-03-04 14:59:12</td>
+                                <td style="padding: 10px;"><span style="padding: 2px 8px; background: #f6ffed; color: #52c41a; border-radius: 4px; font-size: 12px;">External</span></td>
+                                <td style="padding: 10px;">Paid</td>
+                                <td style="padding: 10px;">ITFT4193_api_1</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #f0f0f0;">
+                                <td style="padding: 10px;">2026-03-04 14:57:39</td>
+                                <td style="padding: 10px;"><span style="padding: 2px 8px; background: #f6ffed; color: #52c41a; border-radius: 4px; font-size: 12px;">External</span></td>
+                                <td style="padding: 10px;">Created</td>
+                                <td style="padding: 10px;">ITFT4193_api_1</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧Doris助手 -->
+        <div class="doris-assistant">
+            <div class="doris-header">
+                <div class="header-actions">
+                    <button class="collapse-btn" onclick="toggleSidebar()">
+                        <span>→</span> 收起
+                    </button>
+                    <button class="clear-btn" onclick="clearChat()">
+                        <span>🔄</span> 清空对话
+                    </button>
+                </div>
+                <div class="doris-title">
+                    <div class="doris-logo">🤖</div>
+                    <div>
+                        <div>Doris</div>
+                        <div class="doris-subtitle">智能订单助手</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tools-section">
+                <div class="tools-label">快捷工具</div>
+                <div class="tools-grid">
+                    <div class="tool-card" id="diagnosisTool" onclick="useTool('diagnosis')" data-tool-name="出票问题排查">
+                        <div class="tool-icon">🔍</div>
+                        <div class="tool-name">出票问题排查</div>
+                        <div class="tool-desc">分析失败原因和证据链</div>
+                    </div>
+                    <div class="tool-card" id="pnrTool" onclick="useTool('pnr')" data-tool-name="智能取票号">
+                        <div class="tool-icon">🎫</div>
+                        <div class="tool-name">智能取票号</div>
+                        <div class="tool-desc">从日志提取PNR票号</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-area" id="chatArea">
+                <div class="empty-state">
+                    <div class="empty-icon">👋</div>
+                    <div class="empty-title">你好，我是Doris</div>
+                    <div class="empty-text">
+                        我可以帮你快速诊断订单问题<br>
+                        点击上方工具卡片或直接输入问题
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea
+                        class="input-field"
+                        id="userInput"
+                        placeholder="输入您的问题..."
+                        rows="1"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                        发送
+                    </button>
+                    <button class="interrupt-btn" id="interruptBtn" onclick="interruptTask()">
+                        ⏸ 打断
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 展开按钮（当侧边栏收起时显示） -->
+        <button class="expand-btn" onclick="toggleSidebar()">
+            ←
+        </button>
+    </div>
+
+    <script>
+        // 任务状态管理
+        let currentTask = null;
+        let taskTimeout = null;
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.doris-assistant');
+            sidebar.classList.toggle('collapsed');
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function clearChat() {
+            if (confirm('确定要清空对话历史吗？')) {
+                const chatArea = document.getElementById('chatArea');
+                chatArea.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">👋</div>
+                        <div class="empty-title">你好，我是Doris</div>
+                        <div class="empty-text">
+                            我可以帮你快速诊断订单问题<br>
+                            点击上方工具卡片或直接输入问题
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 设置任务状态
+        function setTaskRunning(toolId, toolName) {
+            currentTask = { toolId, toolName };
+
+            // 禁用所有工具卡片
+            document.querySelectorAll('.tool-card').forEach(card => {
+                if (card.id === toolId) {
+                    card.classList.add('loading');
+                } else {
+                    card.classList.add('disabled');
+                }
+            });
+
+            // 显示打断按钮，隐藏发送按钮
+            document.getElementById('sendBtn').style.display = 'none';
+            document.getElementById('interruptBtn').classList.add('show');
+
+            // 禁用输入框
+            document.getElementById('userInput').disabled = true;
+        }
+
+        // 清除任务状态
+        function clearTaskRunning() {
+            if (taskTimeout) {
+                clearTimeout(taskTimeout);
+                taskTimeout = null;
+            }
+
+            currentTask = null;
+
+            // 恢复所有工具卡片
+            document.querySelectorAll('.tool-card').forEach(card => {
+                card.classList.remove('loading', 'disabled');
+            });
+
+            // 隐藏打断按钮，显示发送按钮
+            document.getElementById('sendBtn').style.display = 'block';
+            document.getElementById('interruptBtn').classList.remove('show');
+
+            // 启用输入框
+            document.getElementById('userInput').disabled = false;
+        }
+
+        // 打断任务
+        function interruptTask() {
+            if (!currentTask) return;
+
+            if (confirm(`确定要打断"${currentTask.toolName}"任务吗？`)) {
+                hideLoading();
+                addMessage('⚠️ 任务已被用户打断');
+
+                // 实际实现中：调用后端API，将任务状态更新为 'interrupted'
+                // 注意：interrupted状态不触发告警，不计入失败率
+                // await updateTaskStatus(currentTask.logId, 'interrupted');
+
+                clearTaskRunning();
+            }
+        }
+
+        function addMessage(content, isUser = false) {
+            const chatArea = document.getElementById('chatArea');
+            const emptyState = chatArea.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${isUser ? 'message-user' : 'message-doris'}`;
+
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+            if (isUser) {
+                messageDiv.innerHTML = `
+                    <div class="message-content">
+                        <div class="message-bubble">${content}</div>
+                        <div class="message-time">${timeStr}</div>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="doris-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-bubble">${content}</div>
+                        <div class="message-time">${timeStr}</div>
+                    </div>
+                `;
+            }
+
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function showLoading(loadingText = '正在处理中...') {
+            const chatArea = document.getElementById('chatArea');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'chat-message message-doris';
+            loadingDiv.id = 'loading-message';
+            loadingDiv.innerHTML = `
+                <div class="doris-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="loading-dots">
+                                <div class="loading-dot"></div>
+                                <div class="loading-dot"></div>
+                                <div class="loading-dot"></div>
+                            </div>
+                            <span style="color: #666; font-size: 13px;">${loadingText}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatArea.appendChild(loadingDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function hideLoading() {
+            const loadingMsg = document.getElementById('loading-message');
+            if (loadingMsg) loadingMsg.remove();
+        }
+
+        function useTool(toolType) {
+            // 如果有任务正在运行,不允许启动新任务
+            if (currentTask) {
+                return;
+            }
+
+            const toolElement = event.currentTarget;
+            const toolId = toolElement.id;
+            const toolName = toolElement.dataset.toolName;
+
+            // 实际实现中：调用后端API创建任务记录，状态为 'processing'
+            // const logId = await createTaskLog(orderId, userId, toolName, userInput, 'processing');
+
+            if (toolType === 'diagnosis') {
+                addMessage('出票问题排查', true);
+                showLoading('正在分析订单出票失败原因...');
+                setTaskRunning(toolId, toolName);
+
+                taskTimeout = setTimeout(() => {
+                    if (!currentTask) return; // 任务已被打断
+
+                    hideLoading();
+                    const resultHTML = `
+                        <div>正在分析订单 ACQKT2026030414573775 的出票失败原因...</div>
+                        <div class="result-card">
+                            <div class="result-header">
+                                <span class="result-icon">📋</span>
+                                <span class="result-title">诊断结果</span>
+                            </div>
+
+                            <div class="result-item">
+                                <div class="result-label">失败原因</div>
+                                <div class="result-value">航司拒绝 - 价格变动</div>
+                            </div>
+
+                            <div class="result-item">
+                                <div class="result-label">置信度</div>
+                                <div class="result-value">
+                                    <span class="confidence-badge confidence-high">高 (0.92)</span>
+                                </div>
+                            </div>
+
+                            <div class="result-item">
+                                <div class="result-label">证据链</div>
+                                <ul class="evidence-timeline">
+                                    <li>
+                                        <span class="evidence-time">2026-03-04 14:57:39</span><br>
+                                        订单创建，初始报价 USD 184.50
+                                    </li>
+                                    <li>
+                                        <span class="evidence-time">2026-03-04 14:58:15</span><br>
+                                        向航司VY发起出票请求
+                                    </li>
+                                    <li>
+                                        <span class="evidence-time">2026-03-04 14:58:42</span><br>
+                                        航司返回拒绝，原因：PRICE_CHANGED
+                                    </li>
+                                    <li>
+                                        <span class="evidence-time">2026-03-04 14:59:12</span><br>
+                                        系统标记订单为"Ticketing"状态
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="result-item">
+                                <div class="result-label">处理建议</div>
+                                <div class="result-value">
+                                    1. 联系航司VY确认最新价格<br>
+                                    2. 如价格可接受，使用新价格重新出票<br>
+                                    3. 如价格不可接受，取消订单并通知客户
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    addMessage(resultHTML);
+
+                    // 实际实现中：任务成功完成，更新状态为 'success'
+                    // await updateTaskStatus(logId, 'success', {
+                    //     agent_response: resultHTML,
+                    //     input_tokens: 1500,
+                    //     output_tokens: 800,
+                    //     total_tokens: 2300,
+                    //     estimated_cost: 0.115
+                    // });
+
+                    clearTaskRunning();
+                }, 10000);
+
+            } else if (toolType === 'pnr') {
+                addMessage('智能取票号', true);
+                showLoading('正在从日志和邮件中提取PNR票号...');
+                setTaskRunning(toolId, toolName);
+
+                taskTimeout = setTimeout(() => {
+                    if (!currentTask) return; // 任务已被打断
+
+                    hideLoading();
+                    const pnrHTML = `
+                        <div>正在从日志和邮件中提取PNR票号...</div>
+                        <div class="result-card">
+                            <div class="result-header">
+                                <span class="result-icon">🎫</span>
+                                <span class="result-title">提取结果</span>
+                            </div>
+
+                            <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #fafafa; border-bottom: 1px solid #e8e8e8;">
+                                        <th style="padding: 10px; text-align: left; font-weight: 600;">PNR</th>
+                                        <th style="padding: 10px; text-align: left; font-weight: 600;">来源</th>
+                                        <th style="padding: 10px; text-align: left; font-weight: 600;">置信度</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                                        <td style="padding: 10px; font-weight: 600; font-family: monospace;">ACQKT2005930</td>
+                                        <td style="padding: 10px;">供应商日志</td>
+                                        <td style="padding: 10px;">
+                                            <span class="confidence-badge confidence-high">高</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    addMessage(pnrHTML);
+                    clearTaskRunning();
+                }, 10000);
+            }
+        }
+
+        function sendMessage() {
+            // 如果有任务正在运行，不允许发送新消息
+            if (currentTask) {
+                return;
+            }
+
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+
+            if (message) {
+                addMessage(message, true);
+                input.value = '';
+                input.style.height = 'auto';
+
+                showLoading('正在思考中...');
+                setTaskRunning('freeChat', '自由对话');
+
+                taskTimeout = setTimeout(() => {
+                    if (!currentTask) return; // 任务已被打断
+
+                    hideLoading();
+                    addMessage('我已收到您的问题。根据订单信息，我建议您先使用"出票问题排查"工具进行诊断，这样可以获得更详细的分析结果。');
+                    clearTaskRunning();
+                }, 10000);
+            }
+        }
+    </script>
+</body>
+</html>
